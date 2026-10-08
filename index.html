@@ -15,9 +15,24 @@
         .notion-border {
             border: 1px solid #e3e3e3;
         }
+
+        /* Preset Class Filter untuk Tampilan Video & Canvas */
+        .filter-none { filter: none; }
+        .filter-vintage { filter: sepia(0.35) contrast(1.15) brightness(1.05) saturate(1.2); }
+        .filter-bw { filter: grayscale(1) contrast(1.2); }
+        .filter-warm { filter: sepia(0.2) saturate(1.4) hue-rotate(-10deg); }
+
+        /* Efek Kilatan Layar (Screen Flash) */
+        #flash-overlay {
+            transition: opacity 0.15s ease-out;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-between p-4 md:p-6 select-none">
+
+    <!-- Screen Flash Overlay -->
+    <div id="flash-overlay" class="fixed inset-0 bg-white opacity-0 z-50"></div>
 
     <!-- HEADER -->
     <header class="w-full max-w-sm text-center pt-6 pb-4">
@@ -31,26 +46,42 @@
     <!-- MAIN CONTENT AREA -->
     <main class="w-full max-w-md flex-1 flex flex-col justify-center items-center my-4">
         
-        <!-- VIEWSCREEN / CAMERA CONTAINER -->
         <div id="camera-container" class="w-full aspect-[3/4] bg-white notion-border rounded-xl overflow-hidden flex flex-col justify-between p-4 shadow-sm relative">
             
-            <!-- Top Status Bar -->
+            <!-- Top Status Bar + Control Bar (Flash & Filter) -->
             <div class="flex justify-between items-center text-xs font-medium tracking-wide text-gray-500 uppercase">
                 <div id="remaining-count">Remaining: 10/10</div>
-                <div id="status-tag" class="px-2 py-0.5 bg-gray-100 rounded-full text-[10px]">Ready</div>
-            </div>
-
-            <!-- Viewfinder Display Window -->
-            <div class="w-full flex-1 my-4 bg-[#f4f4f4] rounded-lg overflow-hidden flex items-center justify-center relative notion-border">
-                <video id="video" class="w-full h-full object-cover hidden" autoplay playsinline></video>
-                <canvas id="canvas" class="w-full h-full object-cover hidden"></canvas>
                 
-                <div id="camera-placeholder" class="text-center p-6">
-                    <p class="text-sm text-gray-500 font-light">Point, shoot, and capture the day. You get ten unfiltered exposures.</p>
+                <!-- Quick Controls -->
+                <div class="flex items-center gap-2">
+                    <!-- Tombol Toggle Flash -->
+                    <button id="flash-btn" class="px-2 py-0.5 border rounded text-[10px] bg-gray-50 hover:bg-gray-100 hidden">
+                        ⚡ Flash: OFF
+                    </button>
+                    <!-- Status Tag -->
+                    <div id="status-tag" class="px-2 py-0.5 bg-gray-100 rounded-full text-[10px]">Ready</div>
                 </div>
             </div>
 
-            <!-- Controls -->
+            <!-- Viewfinder Display Window -->
+            <div class="w-full flex-1 my-3 bg-[#f4f4f4] rounded-lg overflow-hidden flex items-center justify-center relative notion-border">
+                <video id="video" class="w-full h-full object-cover hidden filter-vintage" autoplay playsinline></video>
+                <canvas id="canvas" class="w-full h-full object-cover hidden filter-vintage"></canvas>
+                
+                <div id="camera-placeholder" class="text-center p-6">
+                    <p class="text-sm text-gray-500 font-light">Point, shoot, and capture the sun. You get ten unfiltered exposures.</p>
+                </div>
+            </div>
+
+            <!-- Filter Selector (Pilihan Efek Warna) -->
+            <div id="filter-controls" class="hidden flex justify-center gap-2 mb-3">
+                <button data-filter="filter-vintage" class="filter-option px-2 py-1 text-[10px] border rounded font-semibold bg-black text-white">Vintage</button>
+                <button data-filter="filter-warm" class="filter-option px-2 py-1 text-[10px] border rounded bg-white text-black">Warm</button>
+                <button data-filter="filter-bw" class="filter-option px-2 py-1 text-[10px] border rounded bg-white text-black">B&W</button>
+                <button data-filter="filter-none" class="filter-option px-2 py-1 text-[10px] border rounded bg-white text-black">Normal</button>
+            </div>
+
+            <!-- Bottom Action Controls -->
             <div class="w-full">
                 <button id="main-action-btn" class="w-full py-3.5 bg-black text-white rounded-lg font-medium text-sm tracking-wide uppercase hover:bg-zinc-900 transition-colors">
                     Open Lens
@@ -71,16 +102,15 @@
 
     <footer class="w-full max-w-md text-center pt-4 pb-2">
         <a href="https://drive.google.com/drive/folders/1QRv13wVNj8ObO8mmcfBZUTiK4ylpJhUi?usp=drive_link" target="_blank" class="text-xs font-medium text-gray-400 hover:text-black transition-colors uppercase tracking-wider underline underline-offset-4 inline-block">
-    View Google Drive Gallery ↗
-</a>
+            View Google Drive Gallery ↗
+        </a>
     </footer>
 
     <!-- INTERACTIVE JAVASCRIPT LOGIC -->
     <script>
         window.addEventListener('load', () => {
             
-            // Ganti URL di bawah ini dengan URL Web App dari Google Apps Script Anda
-            const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw8LeaGiHPoyI9a1cuE9Vb2edj0o3oeN2lpyEypM9Paw6fYTYrYwXy6i1KSWxV0Q3yg/exec";
+            const GOOGLE_SCRIPT_URL = "PASTE_URL_WEB_APP_GOOGLE_SCRIPT_DI_SINI";
 
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
@@ -91,17 +121,27 @@
             const cameraPlaceholder = document.getElementById('camera-placeholder');
             const remainingCountDisplay = document.getElementById('remaining-count');
             const statusTag = document.getElementById('status-tag');
+            
+            // Elemen Flash & Filter Baru
+            const flashBtn = document.getElementById('flash-btn');
+            const flashOverlay = document.getElementById('flash-overlay');
+            const filterControls = document.getElementById('filter-controls');
+            const filterButtons = document.querySelectorAll('.filter-option');
 
             let maxPhotos = 10;
             let photosTaken = parseInt(localStorage.getItem('party_photos_count')) || 0;
             let stream = null;
             let capturedImageData = null;
+            
+            // State Flash & Filter
+            let isFlashOn = false;
+            let activeFilter = 'filter-vintage'; // Filter default
 
             updateCounter();
 
             mainActionBtn.addEventListener('click', () => {
                 if (photosTaken >= maxPhotos) {
-                    alert("You've used up your disposable roll! Wait for the gallery link at the end of the party.");
+                    alert("You've used up your disposable roll!");
                     return;
                 }
 
@@ -115,6 +155,26 @@
             retakeBtn.addEventListener('click', resetViewfinderToLive);
             submitBtn.addEventListener('click', commitPhotoToDrive);
 
+            // Toggle Flash Event
+            flashBtn.addEventListener('click', toggleFlash);
+
+            // Selector Filter Event
+            filterButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    activeFilter = e.target.getAttribute('data-filter');
+                    
+                    // Update tampilan tombol filter
+                    filterButtons.forEach(b => {
+                        b.className = "filter-option px-2 py-1 text-[10px] border rounded bg-white text-black";
+                    });
+                    e.target.className = "filter-option px-2 py-1 text-[10px] border rounded font-semibold bg-black text-white";
+
+                    // Terapkan class filter ke video dan canvas
+                    video.className = `w-full h-full object-cover ${activeFilter}`;
+                    canvas.className = `w-full h-full object-cover hidden ${activeFilter}`;
+                });
+            });
+
             async function initCamera() {
                 try {
                     statusTag.innerText = "Connecting...";
@@ -126,6 +186,10 @@
                     video.classList.remove('hidden');
                     cameraPlaceholder.classList.add('hidden');
                     
+                    // Tampilkan kontrol Flash & Filter saat kamera aktif
+                    flashBtn.classList.remove('hidden');
+                    filterControls.classList.remove('hidden');
+
                     mainActionBtn.innerText = "Snap Photo";
                     statusTag.innerText = "Exposing";
                     statusTag.className = "px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-[10px]";
@@ -136,18 +200,54 @@
                 }
             }
 
+            // Fungsi Toggle Flash (Hardware Torch / Screen Flash)
+            async function toggleFlash() {
+                isFlashOn = !isFlashOn;
+                flashBtn.innerText = isFlashOn ? "⚡ Flash: ON" : "⚡ Flash: OFF";
+                flashBtn.classList.toggle('bg-yellow-300', isFlashOn);
+
+                // Coba akses hardware flash/torch HP jika didukung
+                if (stream) {
+                    const track = stream.getVideoTracks()[0];
+                    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                    if (capabilities.torch) {
+                        try {
+                            await track.applyConstraints({
+                                advanced: [{ torch: isFlashOn }]
+                            });
+                        } catch (e) {
+                            console.log("Hardware torch error:", e);
+                        }
+                    }
+                }
+            }
+
             function snapPhoto() {
+                // Efek Visual Screen Flash saat memotret
+                if (isFlashOn) {
+                    flashOverlay.classList.remove('opacity-0');
+                    flashOverlay.classList.add('opacity-90');
+                    setTimeout(() => {
+                        flashOverlay.classList.remove('opacity-90');
+                        flashOverlay.classList.add('opacity-0');
+                    }, 150);
+                }
+
                 const context = canvas.getContext('2d');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
+                // Terapkan filter CSS ke Canvas saat rendering
+                context.filter = getComputedStyle(video).filter;
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                capturedImageData = canvas.toDataURL('image/jpeg', 0.8); // 0.8 kompresi agar upload lebih cepat
+                
+                capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
                 
                 video.classList.add('hidden');
                 canvas.classList.remove('hidden');
                 mainActionBtn.classList.add('hidden');
                 decisionControls.classList.remove('hidden');
+                filterControls.classList.add('hidden'); // Sembunyikan kontrol filter saat review
                 
                 statusTag.innerText = "Reviewing";
                 statusTag.className = "px-2 py-0.5 bg-zinc-100 text-zinc-700 rounded-full text-[10px]";
@@ -158,13 +258,13 @@
                 video.classList.remove('hidden');
                 decisionControls.classList.add('hidden');
                 mainActionBtn.classList.remove('hidden');
+                filterControls.classList.remove('hidden');
                 
                 capturedImageData = null;
                 statusTag.innerText = "Exposing";
                 statusTag.className = "px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-[10px]";
             }
 
-            // Fungsi baru menggantikan upload Supabase
             async function commitPhotoToDrive() {
                 try {
                     statusTag.innerText = "Saving...";
@@ -174,7 +274,7 @@
                         method: 'POST',
                         body: JSON.stringify({ image: capturedImageData }),
                         headers: {
-                            'Content-Type': 'text/plain;charset=utf-8' // Menggunakan text/plain untuk menghindari CORS issue dengan Google Script
+                            'Content-Type': 'text/plain;charset=utf-8'
                         }
                     });
 
@@ -212,6 +312,8 @@
                 }
                 video.classList.add('hidden');
                 canvas.classList.add('hidden');
+                filterControls.classList.add('hidden');
+                flashBtn.classList.add('hidden');
                 cameraPlaceholder.classList.remove('hidden');
                 mainActionBtn.classList.remove('hidden');
                 decisionControls.classList.add('hidden');
